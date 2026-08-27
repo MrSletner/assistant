@@ -1,0 +1,45 @@
+services:
+  # FastAPI Backend - connects to Ollama running natively on the Windows host
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: local-ai-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - MODEL_NAME=llama3.2
+    volumes:
+      - ./memory:/app/memory
+      - ./documents:/app/documents
+      - ./voice:/app/voice
+      - ./automation:/app/automation
+    networks:
+      - local-ai
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: local-ai-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - local-ai
+    environment:
+      - VITE_API_URL=http://localhost:8000
+
+networks:
+  local-ai:
+    driver: bridge
