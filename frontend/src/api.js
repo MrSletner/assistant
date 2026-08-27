@@ -49,3 +49,18 @@ export const listModels = () => apiClient.get('/models');
 export const getHistory = () => apiClient.get('/history');
 
 export const clearHistory = () => apiClient.post('/clear-history');
+
+export const listTasks = (status) =>
+  apiClient.get('/tasks', { params: status ? { status } : {} });
+
+export const createTask = (title, description = '', priority = 'medium', scheduled = null) =>
+  apiClient.post('/tasks', { title, description, priority, scheduled });
+
+export const updateTask = (id, fields) => apiClient.patch(`/tasks/${id}`, fields);
+
+export const deleteTask = (id) => apiClient.delete(`/tasks/${id}`);
+
+export const runAgent = (taskId = null, goal = null) =>
+  apiClient.post('/agent/run', { task_id: taskId, goal }, { responseType: 'stream' });
+
+export const suggestNextSteps = () => apiClient.post('/agent/next');

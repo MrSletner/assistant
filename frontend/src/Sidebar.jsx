@@ -52,7 +52,7 @@ export const Sidebar = ({ onClose }) => {
 
       {/* Tabs */}
       <div className="flex gap-2 mb-4 border-b border-dark-600">
-        {['documents', 'voice', 'memory'].map(t => (
+        {['documents', 'voice', 'agent', 'memory'].map(t => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -122,6 +122,11 @@ export const Sidebar = ({ onClose }) => {
             <button className="btn btn-secondary w-full">📔 Add Journal Entry</button>
           </div>
         )}
+      </div>
+    </div>
+  );
+};
+/>}
       </div>
     </div>
   );

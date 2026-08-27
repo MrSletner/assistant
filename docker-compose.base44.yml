@@ -41,9 +41,10 @@ services:
       - ./memory:/app/memory
       - ./documents:/app/documents
       - ./voice:/app/voice
+      - ./automation:/app/automation
     environment:
       - OLLAMA_BASE_URL=http://ollama:11434
-      - MODEL_NAME=tinyllama
+      - MODEL_NAME=gemma3:4b
     ports:
       - "8000:8000"
     depends_on:

@@ -33,6 +33,10 @@ try:
 except ImportError:
     PIPER_AVAILABLE = False
 
+# Agent imports
+import tasks as taskstore
+from agent import run_agent, propose_next_steps
+
 # Configuration
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 MODEL_NAME = os.getenv("MODEL_NAME", "llama2")
@@ -333,6 +337,88 @@ async def get_memory(memory_type: str):
     try:
         content = load_memory(memory_type)
         return {"type": memory_type, "content": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============ Task / Agent Endpoints ============
+
+class TaskCreate(BaseModel):
+    title: str
+    description: str = ""
+    priority: str = "medium"
+    scheduled: Optional[str] = None
+
+class TaskUpdate(BaseModel):
+    status: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    scheduled: Optional[str] = None
+
+class AgentRunRequest(BaseModel):
+    task_id: Optional[str] = None
+    goal: Optional[str] = None
+
+@app.get("/tasks")
+async def get_tasks(status: Optional[str] = None):
+    """List tasks on the agenda"""
+    return {"tasks": taskstore.list_tasks(status)}
+
+@app.post("/tasks")
+async def create_task(task: TaskCreate):
+    """Schedule a new task"""
+    return taskstore.add_task(task.title, task.description, task.priority, task.scheduled)
+
+@app.patch("/tasks/{task_id}")
+async def patch_task(task_id: str, update: TaskUpdate):
+    """Update a task (status, title, etc.)"""
+    updated = taskstore.update_task(task_id, **update.dict(exclude_unset=True))
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return updated
+
+@app.delete("/tasks/{task_id}")
+async def remove_task(task_id: str):
+    """Delete a task"""
+    if not taskstore.delete_task(task_id):
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"status": "deleted"}
+
+@app.post("/agent/run")
+async def agent_run(request: AgentRunRequest):
+    """Run the autonomous agent on a task or goal, streaming steps as SSE."""
+    if request.task_id:
+        task = taskstore.get_task(request.task_id)
+        if task is None:
+            raise HTTPException(status_code=404, detail="Task not found")
+        goal = task["title"]
+        if task.get("description"):
+            goal = f"{task['title']}\n{task['description']}"
+    elif request.goal:
+        task = None
+        goal = request.goal
+    else:
+        task = taskstore.next_open_task()
+        if task is None:
+            raise HTTPException(status_code=400, detail="No task to run")
+        goal = task["title"]
+        if task.get("description"):
+            goal = f"{task['title']}\n{task['description']}"
+
+    async def generate():
+        try:
+            async for event in run_agent(goal, task):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'event': 'error', 'error': str(e)})}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+@app.post("/agent/next")
+async def agent_next():
+    """Propose the next logical step based on agenda, memory and workflow patterns."""
+    try:
+        return await propose_next_steps()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
