@@ -1,0 +1,84 @@
+services:
+  # Ollama LLM server (runs the model locally)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: local-ai-ollama
+    volumes:
+      - ollama_models:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - local-ai
+
+  # One-shot: pull a small model so chat works out of the box
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: local-ai-ollama-pull
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    command: ["pull", "tinyllama"]
+    restart: "no"
+    networks:
+      - local-ai
+
+  # FastAPI backend - runs from bind-mounted source with live reload
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: local-ai-backend
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - ./memory:/app/memory
+      - ./documents:/app/documents
+      - ./voice:/app/voice
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - MODEL_NAME=tinyllama
+    ports:
+      - "8000:8000"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    networks:
+      - local-ai
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # React + Vite frontend - runs from bind-mounted source with HMR
+  frontend:
+    image: node:20-alpine
+    container_name: local-ai-frontend
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    environment:
+      - VITE_API_URL=https://8000-${BASE44_PUBLIC_HOST_SUFFIX}
+    ports:
+      - "3000:5173"
+    depends_on:
+      - backend
+    command: sh -c "npm install && npx vite --host 0.0.0.0 --port 5173"
+    networks:
+      - local-ai
+
+volumes:
+  ollama_models:
+  frontend_node_modules:
+
+networks:
+  local-ai:
+    driver: bridge
